@@ -1,100 +1,101 @@
-import asyncio
-import json
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой IP</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, sans-serif;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #000);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;
+        }
+        .card {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            padding: 24px; border-radius: 16px;
+            max-width: 340px; width: 100%;
+        }
+        .row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; border-bottom: 1px solid rgba(128,128,128,0.2); }
+        .row:last-child { border-bottom: none; }
+        .label { opacity: 0.7; }
+        .loading { text-align: center; font-size: 16px; }
+        .flag { font-size: 18px; margin-right: 4px; }
+    </style>
+</head>
+<body>
+    <div class="card" id="card">
+        <div class="loading" id="loading">Загрузка данных...</div>
+        <div id="data" style="display: none;"></div>
+    </div>
 
-# ==== НАСТРОЙКИ ====
-BOT_TOKEN = "ВСТАВЬ_СЮДА_ТОКЕН_ОТ_BOTFATHER"
-WEBAPP_URL = "https://giwachka.github.io/ipapp/index.html"
-# ===================
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+    fetch('https://ipinfo.io/json')
+        .then(r => r.json())
+        .then(data => {
+            let html = '';
 
+            const fields = [
+                ['IP-адрес', data.ip],
+                ['Хостнейм', data.hostname],
+                ['Город', data.city],
+                ['Регион', data.region],
+                ['Страна', data.country],
+                ['Почтовый индекс', data.postal],
+                ['Часовой пояс', data.timezone],
+                ['Координаты', data.loc],
+                ['Провайдер', data.org]
+            ];
 
-@dp.message(CommandStart())
-async def start(message: types.Message):
-    kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(
-                text="🔍 Узнать IP",
-                web_app=WebAppInfo(url=WEBAPP_URL)
-            )]
-        ],
-        resize_keyboard=True
-    )
-    await message.answer(
-        "Привет! Нажми кнопку ниже, чтобы узнать свой IP.",
-        reply_markup=kb
-    )
+            if (data.country) {
+                const flagEmoji = getFlagEmoji(data.country);
+                fields.splice(4, 0, ['Флаг', `<span class="flag">${flagEmoji}</span>`]);
+            }
 
+            fields.forEach(([label, value]) => {
+                if (value && value !== '—' && value !== 'undefined') {
+                    html += `<div class="row"><span class="label">${label}</span><span>${value}</span></div>`;
+                }
+            });
 
-@dp.message(F.web_app_data)
-async def handle_webapp(message: types.Message):
-    try:
-        data = json.loads(message.web_app_data.data)
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('data').innerHTML = html;
+            document.getElementById('data').style.display = 'block';
 
-        # Формируем текст с секциями
-        lines = []
+            setTimeout(() => {
+                tg.sendData(JSON.stringify({
+                    ip: data.ip,
+                    hostname: data.hostname,
+                    city: data.city,
+                    region: data.region,
+                    country: data.country,
+                    postal: data.postal,
+                    timezone: data.timezone,
+                    loc: data.loc,
+                    org: data.org
+                }));
+                tg.close();
+            }, 1500);
+        })
+        .catch(err => {
+            document.getElementById('loading').textContent = 'Не удалось получить данные';
+            console.error(err);
+        });
 
-        # Telegram
-        lines.append("👤 *Ваш Telegram*")
-        if data.get('tg_first_name'):
-            lines.append(f"• Имя: {data['tg_first_name']} {data.get('tg_last_name', '')}")
-        if data.get('tg_username'):
-            lines.append(f"• Username: @{data['tg_username']}")
-        if data.get('tg_language'):
-            lines.append(f"• Язык: {data['tg_language']}")
-        if data.get('tg_premium'):
-            lines.append(f"• Premium: Да ⭐")
-        if data.get('tg_id'):
-            lines.append(f"• Telegram ID: `{data['tg_id']}`")
-
-        # IP
-        lines.append("\n🌐 *IP-адрес*")
-        for key, label in [('ip', 'IP'), ('hostname', 'Хостнейм'), ('type', 'Тип')]:
-            if data.get(key):
-                lines.append(f"• {label}: `{data[key]}`")
-
-        # Гео
-        lines.append("\n📍 *Геолокация*")
-        if data.get('country'):
-            flag = ''.join(chr(127397 + ord(c)) for c in data['country'].upper())
-            lines.append(f"• Страна: {flag} {data['country']}")
-        for key, label in [('region', 'Регион'), ('city', 'Город'),
-                            ('postal', 'Индекс'), ('loc', 'Координаты'),
-                            ('timezone', 'Часовой пояс')]:
-            if data.get(key):
-                lines.append(f"• {label}: {data[key]}")
-
-        # Сеть
-        lines.append("\n📡 *Сеть*")
-        for key, label in [('org', 'Провайдер'), ('asn', 'ASN'),
-                            ('asn_name', 'Название ASN'), ('asn_domain', 'Домен ASN'),
-                            ('asn_type', 'Тип ASN')]:
-            if data.get(key):
-                lines.append(f"• {label}: {data[key]}")
-
-        # Доп
-        extras = []
-        if data.get('mobile'): extras.append('Мобильный')
-        if data.get('hosting'): extras.append('Хостинг')
-        if data.get('anycast'): extras.append('Anycast')
-        if data.get('bogon'): extras.append('Bogon')
-        if extras:
-            lines.append("\n🔍 *Дополнительно*")
-            lines.append("• " + ', '.join(extras))
-
-        await message.answer("\n".join(lines), parse_mode="Markdown")
-    except Exception as e:
-        await message.answer(f"Ошибка: {e}")
-
-
-async def main():
-    print("Бот запущен")
-    await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    function getFlagEmoji(countryCode) {
+        const codePoints = countryCode
+            .toUpperCase()
+            .split('')
+            .map(char => 127397 + char.charCodeAt());
+        return String.fromCodePoint(...codePoints);
+    }
+</script>
+</body>
+</html>
