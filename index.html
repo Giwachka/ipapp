@@ -19,10 +19,11 @@
             padding: 24px; border-radius: 16px;
             max-width: 340px; width: 100%;
         }
-        .row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; border-bottom: 1px solid rgba(128,128,128,0.2); }
+        .row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; border-bottom: 1px solid rgba(128,128,128,0.2); }
         .row:last-child { border-bottom: none; }
         .label { opacity: 0.7; }
         .loading { text-align: center; font-size: 16px; }
+        .flag { font-size: 18px; margin-right: 4px; }
     </style>
 </head>
 <body>
@@ -36,24 +37,28 @@
     tg.ready();
     tg.expand();
 
-    // Автоматически запрашиваем данные и отправляем в бот
     fetch('https://ipinfo.io/json')
         .then(r => r.json())
         .then(data => {
-            // Заполняем поля
+            let html = '';
+
             const fields = [
                 ['IP-адрес', data.ip],
+                ['Хостнейм', data.hostname],
                 ['Город', data.city],
                 ['Регион', data.region],
                 ['Страна', data.country],
-                ['Континент', data.continent || data.country], // fallback
-                ['Провайдер', data.org],
-                ['Часовой пояс', data.timezone],
                 ['Почтовый индекс', data.postal],
-                ['Координаты', data.loc]
+                ['Часовой пояс', data.timezone],
+                ['Координаты', data.loc],
+                ['Провайдер', data.org]
             ];
 
-            let html = '';
+            if (data.country) {
+                const flagEmoji = getFlagEmoji(data.country);
+                fields.splice(4, 0, ['Флаг', `<span class="flag">${flagEmoji}</span>`]);
+            }
+
             fields.forEach(([label, value]) => {
                 if (value && value !== '—' && value !== 'undefined') {
                     html += `<div class="row"><span class="label">${label}</span><span>${value}</span></div>`;
@@ -64,26 +69,33 @@
             document.getElementById('data').innerHTML = html;
             document.getElementById('data').style.display = 'block';
 
-            // Сразу отправляем данные в бот
             setTimeout(() => {
                 tg.sendData(JSON.stringify({
                     ip: data.ip,
+                    hostname: data.hostname,
                     city: data.city,
                     region: data.region,
                     country: data.country,
-                    continent: data.continent || '',
-                    org: data.org,
-                    timezone: data.timezone,
                     postal: data.postal,
-                    loc: data.loc
+                    timezone: data.timezone,
+                    loc: data.loc,
+                    org: data.org
                 }));
                 tg.close();
-            }, 1000); // Небольшая задержка, чтобы пользователь успел увидеть данные
+            }, 1500);
         })
         .catch(err => {
             document.getElementById('loading').textContent = 'Не удалось получить данные';
             console.error(err);
         });
+
+    function getFlagEmoji(countryCode) {
+        const codePoints = countryCode
+            .toUpperCase()
+            .split('')
+            .map(char => 127397 + char.charCodeAt());
+        return String.fromCodePoint(...codePoints);
+    }
 </script>
 </body>
 </html>
